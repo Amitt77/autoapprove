@@ -34,6 +34,8 @@ const GitHubLogo = () => (
   </svg>
 );
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+
 const App: React.FC = () => {
   const [tokens, setTokens] = useState<Token[]>([]);
   const [newTokenName, setNewTokenName] = useState('');
@@ -68,7 +70,7 @@ const App: React.FC = () => {
 
   const fetchHistory = async () => {
     try {
-      const res = await axios.get('/api/history');
+      const res = await axios.get(`${API_BASE}/api/history`);
       const data = Array.isArray(res.data) ? res.data : [];
       setHistory(
         data.map((e: any) => ({
@@ -84,7 +86,7 @@ const App: React.FC = () => {
 
   const clearHistory = async () => {
     try {
-      await axios.delete('/api/history');
+      await axios.delete(`${API_BASE}/api/history`);
       setHistory([]);
     } catch (err: any) {
       console.error('Error clearing history:', err);
@@ -93,7 +95,7 @@ const App: React.FC = () => {
 
   const fetchTokens = async () => {
     try {
-      const res = await axios.get('/api/tokens');
+      const res = await axios.get(`${API_BASE}/api/tokens`);
       setTokens(Array.isArray(res.data) ? res.data : []);
     } catch (err: any) {
       console.error('Error fetching tokens:', err);
@@ -106,7 +108,7 @@ const App: React.FC = () => {
     clearMessages();
     try {
       setLoading(true);
-      await axios.post('/api/tokens', { name: newTokenName, token: newTokenValue });
+      await axios.post(`${API_BASE}/api/tokens`, { name: newTokenName, token: newTokenValue });
       setNewTokenName('');
       setNewTokenValue('');
       setSuccess('Token saved successfully.');
@@ -122,7 +124,7 @@ const App: React.FC = () => {
     try {
       setLoading(true);
       setPrDetails(null);
-      const res = await axios.post('/api/pr/details', { url: prUrl });
+      const res = await axios.post(`${API_BASE}/api/pr/details`, { url: prUrl });
       setPrDetails(res.data);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to fetch PR details');
@@ -134,7 +136,7 @@ const App: React.FC = () => {
     clearMessages();
     try {
       setLoading(true);
-      await axios.post('/api/pr/approve', {
+      await axios.post(`${API_BASE}/api/pr/approve`, {
         url: prUrl,
         tokenId: selectedTokenId,
         prTitle: prDetails.title,
