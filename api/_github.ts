@@ -18,6 +18,5 @@ export const approvePR = async (token: string, owner: string, repo: string, pull
   await octokit.rest.pulls.createReview({
     owner, repo, pull_number,
     event: 'APPROVE',
-    body: 'Emergency approval via PR Emergency Approval Tool',
   });
 };
