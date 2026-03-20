@@ -1,0 +1,27 @@
+{
+  "name": "approve",
+  "version": "1.0.0",
+  "scripts": {
+    "server": "nodemon --watch 'backend/src/**/*.ts' --exec 'ts-node --project backend/tsconfig.json' backend/src/index.ts",
+    "client": "cd frontend && npm run dev",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.1.1",
+    "cors": "^2.8.5",
+    "crypto-js": "^4.2.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mongoose": "^8.10.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/mongoose": "^5.11.96",
+    "@types/node": "^22.13.4",
+    "concurrently": "^9.2.1",
+    "nodemon": "^3.1.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  }
+}
