@@ -69,8 +69,9 @@ const App: React.FC = () => {
   const fetchHistory = async () => {
     try {
       const res = await axios.get('/api/history');
+      const data = Array.isArray(res.data) ? res.data : [];
       setHistory(
-        res.data.map((e: any) => ({
+        data.map((e: any) => ({
           ...e,
           id: e._id,
           timestamp: e.timestamp ? new Date(e.timestamp) : new Date(),
@@ -93,7 +94,7 @@ const App: React.FC = () => {
   const fetchTokens = async () => {
     try {
       const res = await axios.get('/api/tokens');
-      setTokens(res.data);
+      setTokens(Array.isArray(res.data) ? res.data : []);
     } catch (err: any) {
       console.error('Error fetching tokens:', err);
     }
