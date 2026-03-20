@@ -69,7 +69,13 @@ const App: React.FC = () => {
   const fetchHistory = async () => {
     try {
       const res = await axios.get('/api/history');
-      setHistory(res.data.map((e: any) => ({ ...e, id: e._id, timestamp: new Date(e.timestamp) })));
+      setHistory(
+        res.data.map((e: any) => ({
+          ...e,
+          id: e._id,
+          timestamp: e.timestamp ? new Date(e.timestamp) : new Date(),
+        }))
+      );
     } catch (err: any) {
       console.error('Error fetching history:', err);
     }
@@ -141,11 +147,19 @@ const App: React.FC = () => {
     }
   };
 
-  const fmt = (d: Date) =>
-    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const fmt = (d: Date) => {
+    try {
+      if (!d || isNaN(d.getTime())) return '--:--:--';
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch { return '--:--:--'; }
+  };
 
-  const fmtDate = (d: Date) =>
-    d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const fmtDate = (d: Date) => {
+    try {
+      if (!d || isNaN(d.getTime())) return '---';
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    } catch { return '---'; }
+  };
 
   return (
     <div className="app-wrapper">
