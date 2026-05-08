@@ -1,164 +1,125 @@
-require("dotenv").config();
-const { App } = require("@slack/bolt");
-const { WebClient } = require("@slack/web-api");
-const { Octokit } = require("@octokit/rest");
-
-// ─── Environment & Config ─────────────────────────────────────────────────────
-
-const config = {
-  slack: {
-    userToken  : process.env.SLACK_USER_TOKEN,  // xoxp- : read your personal DMs
-    botToken   : process.env.SLACK_BOT_TOKEN,   // xoxb- : reserved / future use
-    appToken   : process.env.SLACK_APP_TOKEN,   // xapp- : socket mode connection
-  },
-  github: {
-    token      : process.env.GITHUB_TOKEN,      // classic PAT with repo scope
-  },
-  // ── Whitelist ───────────────────────────────────────────────────────────────
-  // Partial GitHub usernames — matches if the PR author's username contains any entry.
-  // e.g. "bibek" matches "bibekshah220"
-  whitelistedGithubUsers: [
-    "amit",
-    "bibek",
-    "bikas",
-    "suman",
-    "bhusan",
-    "kapil",
-    "suraj",
-    "parbat",
-    "sibendra",
-    "ram",
-    "prassidha",
-    "rohan",
-    "mandip",
-    "kushal",
-    "kushal",
-    "viikas",
-    "taukir",
-    "amanchy",
-    "prashantghartimagar"
-  ].map((u) => u.toLowerCase()),
-
-  // ── Optional channel watching ───────────────────────────────────────────────
-  // Add Slack channel IDs here to also watch for PR links in those channels.
-  // The bot must be invited to each channel first (/invite @bot-name).
-  // Leave empty to disable.
-  watchChannels: process.env.WATCH_CHANNELS
-    ? process.env.WATCH_CHANNELS.split(",").map((c) => c.trim()).filter(Boolean)
-    : [],
-};
-
 const GITHUB_PR_REGEX = /https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/g;
 
-// ─── Clients ──────────────────────────────────────────────────────────────────
+const WHITELISTED_USERS = [
+  "amit", "bibek", "bikas", "suman", "bhusan", "kapil",
+  "suraj", "parbat", "sibendra", "ram", "prassidha", "rohan",
+  "mandip", "kushal", "viikas", "taukir", "amanchy", "prashantghartimagar",
+].map((u) => u.toLowerCase());
 
-const app = new App({
-  token     : config.slack.botToken,
-  appToken  : config.slack.appToken,
-  socketMode: true,
-});
+async function verifySlackSignature(request, rawBody, signingSecret) {
+  const timestamp = request.headers.get("x-slack-request-timestamp");
+  const signature = request.headers.get("x-slack-signature");
+  if (!timestamp || !signature) return false;
+  if (Math.abs(Date.now() / 1000 - parseInt(timestamp, 10)) > 300) return false;
 
-const octokit = new Octokit({ auth: config.github.token });
-const userClient = config.slack.userToken ? new WebClient(config.slack.userToken) : null;
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", enc.encode(signingSecret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`v0:${timestamp}:${rawBody}`));
+  const hex = "v0=" + [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return hex === signature;
+}
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+async function ghRequest(path, method = "GET", body, token) {
+  const res = await fetch(`https://api.github.com${path}`, {
+    method,
+    headers: {
+      Authorization: `token ${token}`,
+      "User-Agent": "slack-pr-bot",
+      Accept: "application/vnd.github.v3+json",
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) throw new Error(`GitHub ${method} ${path} → ${res.status}`);
+  return res.json();
+}
 
-/** Extracts all GitHub PR links from a message text */
+async function addReaction(channel, timestamp, botToken) {
+  const res = await fetch("https://slack.com/api/reactions.add", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${botToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ channel, timestamp, name: "white_check_mark" }),
+  });
+  const data = await res.json();
+  if (!data.ok && data.error !== "already_reacted") {
+    console.error("[slack] reaction error:", data.error);
+  }
+}
+
 function extractPRLinks(text) {
-  const matches = [];
-  let match;
-  const regex = new RegExp(GITHUB_PR_REGEX.source, "g");
-  while ((match = regex.exec(text)) !== null) {
-    matches.push({
-      owner      : match[1],
-      repo       : match[2],
-      pull_number: parseInt(match[3], 10),
-    });
+  const hits = [];
+  const re = new RegExp(GITHUB_PR_REGEX.source, "g");
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    hits.push({ owner: m[1], repo: m[2], pull_number: parseInt(m[3], 10) });
   }
-  return matches;
+  return hits;
 }
 
-/** Fetches the PR author's GitHub username */
-async function getGitHubPRAuthor({ owner, repo, pull_number }) {
-  const { data } = await octokit.pulls.get({ owner, repo, pull_number });
-  return data.user.login.toLowerCase();
-}
-
-/** Approves a GitHub PR */
-async function approveGitHubPR({ owner, repo, pull_number }) {
-  await octokit.pulls.createReview({ owner, repo, pull_number, event: "APPROVE" });
-  console.log(`[github] Approved ${owner}/${repo}#${pull_number}`);
-}
-
-/** Adds a ✅ reaction. Tries bot first, falls back to user token. */
-async function addCheckmarkReaction(client, channel, timestamp) {
-  const args = { channel, timestamp, name: "white_check_mark" };
-  try {
-    await client.reactions.add(args);
-  } catch (err) {
-    if (!userClient) throw err;
-    if (err.data?.error === "already_reacted") return;
-    console.log(`[bot] bot reaction failed (${err.data?.error}), retry with user token`);
-    await userClient.reactions.add(args);
-  }
-}
-
-// ─── Core handler ─────────────────────────────────────────────────────────────
-
-async function handleMessage({ message, client, isDM }) {
-  const text   = message.text || "";
-  const userId = message.user;
-
-  if (!userId || message.subtype === "bot_message") return;
-
+async function handleMessage(event, env) {
+  const text = event.text || "";
   const prLinks = extractPRLinks(text);
-  if (prLinks.length === 0) return;
+  if (!prLinks.length) return;
+
+  const watchChannels = env.WATCH_CHANNELS
+    ? env.WATCH_CHANNELS.split(",").map((c) => c.trim()).filter(Boolean)
+    : [];
+
+  const isDM = event.channel_type === "im";
+  const isWatched =
+    (event.channel_type === "channel" || event.channel_type === "group") &&
+    watchChannels.includes(event.channel);
+
+  if (!isDM && !isWatched) return;
 
   for (const pr of prLinks) {
     try {
-      const author       = await getGitHubPRAuthor(pr);
-      const isWhitelisted = config.whitelistedGithubUsers.some((name) => author.includes(name));
+      const data = await ghRequest(
+        `/repos/${pr.owner}/${pr.repo}/pulls/${pr.pull_number}`,
+        "GET", null, env.GITHUB_TOKEN
+      );
+      const author = data.user.login.toLowerCase();
+      const allowed = WHITELISTED_USERS.some((name) => author.includes(name));
+      console.log(`[github] ${pr.owner}/${pr.repo}#${pr.pull_number} author=${author} allowed=${allowed}`);
 
-      console.log(`[github] PR ${pr.owner}/${pr.repo}#${pr.pull_number} — author: ${author} — whitelisted: ${isWhitelisted} — via: ${isDM ? "DM" : "channel"}`);
+      if (!allowed) continue;
 
-      if (!isWhitelisted) {
-        console.log(`[bot] Ignored — "${author}" is not in the whitelist`);
-        continue;
-      }
-
-      await approveGitHubPR(pr);
-      console.log(`[bot] channel=${message.channel} ts=${message.ts} type=${message.channel_type}`);
-      await addCheckmarkReaction(client, message.channel, message.ts);
-      console.log(`[bot] ✅ Approved and reacted on PR by "${author}"`);
+      await ghRequest(
+        `/repos/${pr.owner}/${pr.repo}/pulls/${pr.pull_number}/reviews`,
+        "POST", { event: "APPROVE" }, env.GITHUB_TOKEN
+      );
+      await addReaction(event.channel, event.ts, env.SLACK_BOT_TOKEN);
+      console.log(`[bot] approved PR by "${author}"`);
     } catch (err) {
-      console.error(`[bot] Failed for ${pr.owner}/${pr.repo}#${pr.pull_number}:`, err.message);
+      console.error(`[bot] failed ${pr.owner}/${pr.repo}#${pr.pull_number}:`, err.message);
     }
   }
 }
 
-// ─── DM listener (primary) ────────────────────────────────────────────────────
+export default {
+  async fetch(request, env, ctx) {
+    if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
 
-app.message(async ({ message, client }) => {
-  if (message.channel_type !== "im") return;
-  await handleMessage({ message, client, isDM: true });
-});
+    const rawBody = await request.text();
 
-// ─── Channel listener (optional) ─────────────────────────────────────────────
-// Activated by adding channel IDs to WATCH_CHANNELS in .env
+    const valid = await verifySlackSignature(request, rawBody, env.SLACK_SIGNING_SECRET);
+    if (!valid) return new Response("Unauthorized", { status: 401 });
 
-if (config.watchChannels.length > 0) {
-  app.message(async ({ message, client }) => {
-    if (message.channel_type !== "channel" && message.channel_type !== "group") return;
-    if (!config.watchChannels.includes(message.channel)) return;
-    await handleMessage({ message, client, isDM: false });
-  });
-}
+    const payload = JSON.parse(rawBody);
 
-// ─── Start ────────────────────────────────────────────────────────────────────
+    if (payload.type === "url_verification") {
+      return new Response(JSON.stringify({ challenge: payload.challenge }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
-(async () => {
-  await app.start();
-  console.log("⚡ Slack PR bot is running via Socket Mode");
-  console.log(`   Whitelisted GitHub users : ${config.whitelistedGithubUsers.join(", ") || "(none set)"}`);
-  console.log(`   Channel watching         : ${config.watchChannels.length > 0 ? config.watchChannels.join(", ") : "disabled"}`);
-})();
+    if (payload.type === "event_callback" && payload.event?.type === "message" && !payload.event?.subtype) {
+      ctx.waitUntil(handleMessage(payload.event, env));
+    }
+
+    return new Response("OK");
+  },
+};
