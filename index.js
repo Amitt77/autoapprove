@@ -104,17 +104,17 @@ export default {
     if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
 
     const rawBody = await request.text();
-
-    const valid = await verifySlackSignature(request, rawBody, env.SLACK_SIGNING_SECRET);
-    if (!valid) return new Response("Unauthorized", { status: 401 });
-
     const payload = JSON.parse(rawBody);
 
+    // url_verification has no sensitive data — safe to respond before sig check
     if (payload.type === "url_verification") {
       return new Response(JSON.stringify({ challenge: payload.challenge }), {
         headers: { "Content-Type": "application/json" },
       });
     }
+
+    const valid = await verifySlackSignature(request, rawBody, env.SLACK_SIGNING_SECRET);
+    if (!valid) return new Response("Unauthorized", { status: 401 });
 
     if (payload.type === "event_callback" && payload.event?.type === "message" && !payload.event?.subtype) {
       ctx.waitUntil(handleMessage(payload.event, env));
