@@ -1,15 +1,13 @@
 {
   "name": "slack-pr-bot",
   "version": "1.0.0",
-  "description": "Auto-approves GitHub PRs from whitelisted Slack users who DM a PR link",
-  "main": "index.js",
+  "description": "Auto-approves GitHub PRs from whitelisted Slack users via Cloudflare Workers",
+  "private": true,
   "scripts": {
-    "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
   },
-  "dependencies": {
-    "@octokit/rest": "^21.0.2",
-    "@slack/bolt": "^4.7.0",
-    "dotenv": "^16.4.5"
+  "devDependencies": {
+    "wrangler": "^3.0.0"
   }
 }
