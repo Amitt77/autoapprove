@@ -1,30 +1,15 @@
 {
-  "name": "approve",
+  "name": "slack-pr-bot",
   "version": "1.0.0",
+  "description": "Auto-approves GitHub PRs from whitelisted Slack users who DM a PR link",
+  "main": "index.js",
   "scripts": {
-    "server": "nodemon --watch 'backend/src/**/*.ts' --exec 'ts-node --project backend/tsconfig.json' backend/src/index.ts",
-    "client": "cd frontend && npm run dev",
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "build:backend": "tsc -p backend/tsconfig.json",
-    "start:backend": "node backend/dist/index.js"
+    "start": "node index.js",
+    "dev": "node --watch index.js"
   },
   "dependencies": {
-    "@octokit/rest": "^18.12.0",
-    "cors": "^2.8.5",
-    "crypto-js": "^4.2.0",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "mongoose": "^8.10.1"
-  },
-  "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.0",
-    "@types/mongoose": "^5.11.96",
-    "@types/node": "^22.13.4",
-    "@vercel/node": "^5.6.18",
-    "concurrently": "^9.2.1",
-    "nodemon": "^3.1.9",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.7.3"
+    "@octokit/rest": "^21.0.2",
+    "@slack/bolt": "^4.7.0",
+    "dotenv": "^16.4.5"
   }
 }
