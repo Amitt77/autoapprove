@@ -38,15 +38,28 @@ async function ghRequest(path, method = "GET", body, token) {
   return res.json();
 }
 
-async function addReaction(channel, timestamp, botToken) {
-  const res = await fetch("https://slack.com/api/reactions.add", {
+async function addReaction(channel, timestamp, botToken, userToken) {
+  const payload = JSON.stringify({ channel, timestamp, name: "white_check_mark" });
+  const headers = { "Content-Type": "application/json" };
+
+  const botRes = await fetch("https://slack.com/api/reactions.add", {
     method: "POST",
-    headers: { Authorization: `Bearer ${botToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ channel, timestamp, name: "white_check_mark" }),
+    headers: { ...headers, Authorization: `Bearer ${botToken}` },
+    body: payload,
   });
-  const data = await res.json();
-  if (!data.ok && data.error !== "already_reacted") {
-    console.error("[slack] reaction error:", data.error);
+  const botData = await botRes.json();
+  if (botData.ok || botData.error === "already_reacted") return;
+
+  // bot can't reach user DMs — fall back to user token
+  if (!userToken) { console.error("[slack] reaction error:", botData.error); return; }
+  const userRes = await fetch("https://slack.com/api/reactions.add", {
+    method: "POST",
+    headers: { ...headers, Authorization: `Bearer ${userToken}` },
+    body: payload,
+  });
+  const userData = await userRes.json();
+  if (!userData.ok && userData.error !== "already_reacted") {
+    console.error("[slack] reaction error (user token):", userData.error);
   }
 }
 
@@ -92,7 +105,7 @@ async function handleMessage(event, env) {
         `/repos/${pr.owner}/${pr.repo}/pulls/${pr.pull_number}/reviews`,
         "POST", { event: "APPROVE" }, env.GITHUB_TOKEN
       );
-      await addReaction(event.channel, event.ts, env.SLACK_BOT_TOKEN);
+      await addReaction(event.channel, event.ts, env.SLACK_BOT_TOKEN, env.SLACK_USER_TOKEN);
       console.log(`[bot] approved PR by "${author}"`);
     } catch (err) {
       console.error(`[bot] failed ${pr.owner}/${pr.repo}#${pr.pull_number}:`, err.message);
