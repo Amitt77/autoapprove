@@ -4,7 +4,7 @@ const WHITELISTED_USERS = [
   "amit", "bibek", "bikas", "suman", "bhusan", "kapil",
   "suraj", "parbat", "sibendra", "ram", "prassidha", "rohan",
   "mandip", "kushal", "viikas", "taukir", "amanchy", "prashantghartimagar",
-  "abhishek",
+  "abhishek","animesh","bibash kadel","bibash2"
 ].map((u) => u.toLowerCase());
 
 async function verifySlackSignature(request, rawBody, signingSecret) {
@@ -38,6 +38,21 @@ async function ghRequest(path, method = "GET", body, token) {
   return res.json();
 }
 
+async function isAlreadyApprovedByMe(pr, token) {
+  const me = await ghRequest("/user", "GET", null, token);
+  const myLogin = me.login.toLowerCase();
+  const reviews = await ghRequest(
+    `/repos/${pr.owner}/${pr.repo}/pulls/${pr.pull_number}/reviews`,
+    "GET", null, token
+  );
+  const mine = reviews.filter(
+    (r) => r.user?.login?.toLowerCase() === myLogin &&
+      (r.state === "APPROVED" || r.state === "CHANGES_REQUESTED" || r.state === "DISMISSED")
+  );
+  if (!mine.length) return false;
+  return mine[mine.length - 1].state === "APPROVED";
+}
+
 async function addReaction(channel, timestamp, botToken, userToken) {
   const payload = JSON.stringify({ channel, timestamp, name: "white_check_mark" });
   const headers = { "Content-Type": "application/json" };
@@ -50,7 +65,6 @@ async function addReaction(channel, timestamp, botToken, userToken) {
   const botData = await botRes.json();
   if (botData.ok || botData.error === "already_reacted") return;
 
-  // bot can't reach user DMs — fall back to user token
   if (!userToken) { console.error("[slack] reaction error:", botData.error); return; }
   const userRes = await fetch("https://slack.com/api/reactions.add", {
     method: "POST",
@@ -71,6 +85,18 @@ function extractPRLinks(text) {
     hits.push({ owner: m[1], repo: m[2], pull_number: parseInt(m[3], 10) });
   }
   return hits;
+}
+
+function parsePrUrl(url) {
+  const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+  if (!m) return null;
+  return { owner: m[1], repo: m[2], pull_number: m[3] };
+}
+
+function ephemeral(text) {
+  return new Response(JSON.stringify({ response_type: "ephemeral", text }), {
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 async function handleMessage(event, env) {
@@ -101,6 +127,12 @@ async function handleMessage(event, env) {
 
       if (!allowed) continue;
 
+      if (await isAlreadyApprovedByMe(pr, env.GITHUB_TOKEN)) {
+        await addReaction(event.channel, event.ts, env.SLACK_BOT_TOKEN, env.SLACK_USER_TOKEN);
+        console.log(`[bot] already approved PR by "${author}", skipping`);
+        continue;
+      }
+
       await ghRequest(
         `/repos/${pr.owner}/${pr.repo}/pulls/${pr.pull_number}/reviews`,
         "POST", { event: "APPROVE" }, env.GITHUB_TOKEN
@@ -113,14 +145,53 @@ async function handleMessage(event, env) {
   }
 }
 
+async function handleSlashApprove(request, rawBody, env) {
+  const valid = await verifySlackSignature(request, rawBody, env.SLACK_SIGNING_SECRET);
+  if (!valid) return new Response("Unauthorized", { status: 401 });
+
+  const params = new URLSearchParams(rawBody);
+  const prUrl = (params.get("text") || "").trim();
+  const userName = params.get("user_name") || "unknown";
+
+  if (!prUrl) return ephemeral("Usage: `/approve <GitHub PR URL>`");
+
+  const pr = parsePrUrl(prUrl);
+  if (!pr) return ephemeral(`❌ Invalid PR URL. Example: \`/approve https://github.com/owner/repo/pull/123\``);
+
+  try {
+    if (await isAlreadyApprovedByMe(pr, env.GITHUB_TOKEN)) {
+      console.log(`[slash] already approved ${prUrl} by ${userName}, skipping`);
+      return ephemeral(`✅ Already approved.\n${prUrl}`);
+    }
+    await ghRequest(
+      `/repos/${pr.owner}/${pr.repo}/pulls/${pr.pull_number}/reviews`,
+      "POST", { event: "APPROVE" }, env.GITHUB_TOKEN
+    );
+    console.log(`[slash] approved ${prUrl} by ${userName}`);
+    return ephemeral(`✅ PR approved!\n${prUrl}`);
+  } catch (err) {
+    console.error(`[slash] failed ${prUrl}:`, err.message);
+    return ephemeral(`❌ GitHub error: ${err.message}`);
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
 
+    const url = new URL(request.url);
     const rawBody = await request.text();
-    const payload = JSON.parse(rawBody);
 
-    // url_verification has no sensitive data — safe to respond before sig check
+    // Slack slash command: POST /approve
+    if (url.pathname === "/approve") {
+      return handleSlashApprove(request, rawBody, env);
+    }
+
+    // Slack Events API: POST /
+    let payload;
+    try { payload = JSON.parse(rawBody); } catch { return new Response("Bad Request", { status: 400 }); }
+
+    // url_verification has no sensitive data — safe before sig check
     if (payload.type === "url_verification") {
       return new Response(JSON.stringify({ challenge: payload.challenge }), {
         headers: { "Content-Type": "application/json" },
