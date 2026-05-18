@@ -4,7 +4,7 @@ const WHITELISTED_USERS = [
   "amit", "bibek", "bikas", "suman", "bhusan", "kapil",
   "suraj", "parbat", "sibendra", "ram", "prassidha", "rohan",
   "mandip", "kushal", "viikas", "taukir", "amanchy", "prashantghartimagar",
-  "abhishek","animesh","bibash kadel","bibash2"
+  "abhishek","animesh","bibash kadel","bibash2","kandelkapi1"
 ].map((u) => u.toLowerCase());
 
 async function verifySlackSignature(request, rawBody, signingSecret) {
