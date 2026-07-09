@@ -4,7 +4,7 @@ const WHITELISTED_USERS = [
   "amit", "bibek", "bikas", "suman", "bhusan", "kapil",
   "suraj", "parbat", "sibendra", "ram", "prassidha", "rohan",
   "mandip", "kushal", "viikas", "taukir", "amanchy", "prashantghartimagar",
-  "abhishek","animesh","bibash kadel","bibash2","kandelkapi1"
+  "abhishek","animesh","bibash kadel","bibash2","kandelkapi1","niraj"
 ].map((u) => u.toLowerCase());
 
 async function verifySlackSignature(request, rawBody, signingSecret) {
@@ -77,6 +77,16 @@ async function addReaction(channel, timestamp, botToken, userToken) {
   }
 }
 
+async function postMessage(channel, thread_ts, text, botToken) {
+  const res = await fetch("https://slack.com/api/chat.postMessage", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${botToken}` },
+    body: JSON.stringify({ channel, thread_ts, text }),
+  });
+  const data = await res.json();
+  if (!data.ok) console.error("[slack] postMessage error:", data.error);
+}
+
 function extractPRLinks(text) {
   const hits = [];
   const re = new RegExp(GITHUB_PR_REGEX.source, "g");
@@ -125,7 +135,14 @@ async function handleMessage(event, env) {
       const allowed = WHITELISTED_USERS.some((name) => author.includes(name));
       console.log(`[github] ${pr.owner}/${pr.repo}#${pr.pull_number} author=${author} allowed=${allowed}`);
 
-      if (!allowed) continue;
+      if (!allowed) {
+        await postMessage(
+          event.channel, event.ts,
+          `⚠️ The author of <https://github.com/${pr.owner}/${pr.repo}/pull/${pr.pull_number}|${pr.repo}#${pr.pull_number}> (\`${author}\`) is not whitelisted — skipped auto-approval.`,
+          env.SLACK_BOT_TOKEN
+        );
+        continue;
+      }
 
       if (await isAlreadyApprovedByMe(pr, env.GITHUB_TOKEN)) {
         await addReaction(event.channel, event.ts, env.SLACK_BOT_TOKEN, env.SLACK_USER_TOKEN);
