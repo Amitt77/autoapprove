@@ -1,10 +1,41 @@
 const GITHUB_PR_REGEX = /https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/g;
 
 const WHITELISTED_USERS = [
-  "amit", "bibek", "bikas", "suman", "bhusan", "kapil",
-  "suraj", "parbat", "sibendra", "ram", "prassidha", "rohan",
-  "mandip", "kushal", "viikas", "taukir", "amanchy", "prashantghartimagar",
-  "abhishek","animesh","bibash kadel","bibash2","kandelkapi1","niraj"
+  "aasthaandani", "abhinash-portpro", "abhishekkamati1", "adamportpro",
+  "aditya-portpro", "aidang295", "ajit-qa", "alexa0712", "alexeyaudasamora",
+  "amanchy", "amitt77", "andyee11", "animesh-pp", "anjalrai-pp",
+  "ankit-portpro", "ankush-portpro", "anniechounra14", "annieedholm-eng",
+  "annmarie-cmyk", "austin396", "bhusan-dev", "bibash2", "bibekshah220",
+  "bprabin811", "briannatennant-sys", "bugthedebugger", "captain-csr",
+  "captain-qa-india", "charlotte531", "chirag-portpro", "coralyz-sys",
+  "corey-svg", "devarsheee12", "dharmeshportpro", "dhruv-italiya1746",
+  "digvijayportpro", "dilippatel-dotcom", "diplap-del", "djemish1",
+  "douglasportpro", "esayas-portpro", "eshure-portpro", "fenildev",
+  "gflores-pp", "gracy-wq", "harrison-sketch", "harsh-1095", "harsh-portpro",
+  "hmonpara", "jacobportpro", "jamesbarr-pixel", "jasonmckenzie-crypto",
+  "jaymeenjogiya", "jimmylopez-code", "jinish014", "joanneabsher",
+  "joe-wick", "jolynn-portpro", "jordanmckenzie-creator",
+  "josephgreenwell-code", "josephreynolds-del", "jrathbun7259",
+  "kandelkapi1", "katherine-crypto", "kdburch", "kenrosenthal-png",
+  "kevin-portpro", "khimananda-portpro", "kiraw97", "kjesmin",
+  "kristen-frakes", "kushal1715", "kushalbaj", "lamadev7",
+  "landonwalshportpro", "lindsey-blip", "lori-creator", "mahimasinghp",
+  "mandipportpro", "meghan-ops", "michaelbenton-portpro", "milan-portpro",
+  "milesv", "morganportpro", "nabin12", "nee2zz", "nelson491",
+  "nihar-padhi-portpro", "nikki270", "niraj-gautam", "nirajan995",
+  "ombeladiya1854", "osan-rai", "parthikk", "portpro-sanjay", "portpro-tms",
+  "prabeshio", "prajjwal440", "prashant-portpro", "prashantghartimagar",
+  "prasiddha9999", "priya-portpro", "pukar-portpro", "rachael-netizen",
+  "rahulpandya-portpro", "rajanmaurya26", "ramsthapit", "riyapradhan-cpu",
+  "robbie-im", "rohanprajapatitachi", "ryanportpro", "sanjayportpro",
+  "sarma-chsaps", "sawsankpro", "shelby-wq", "shemallika", "shikha-patel14",
+  "shishir111222", "shweta-portpro", "sibendra-portpro", "sjdpk", "smit033",
+  "smriti-portpro", "sparth033", "sumankhadkaportpro", "surajgm",
+  "suresh-nv", "sushicodee", "swetha-svg", "swos-ti", "system-portpro",
+  "taukirsheikh", "terrell67", "thenotoriousmec", "tlaug", "tonipisano",
+  "tylerpoffenberger", "tyracarr", "viikas", "vinicio-ops", "viralrkyada",
+  "walkerportpro", "wiblebenjamin", "ybabiya", "ykpro25", "bikas", "kapil",
+  "parbat", "prassidha"
 ].map((u) => u.toLowerCase());
 
 async function verifySlackSignature(request, rawBody, signingSecret) {

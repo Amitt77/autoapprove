@@ -8,7 +8,14 @@
       "Bash(git init:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git -C /Users/amit/Documents/portpro/autoapprove log --oneline -5)",
+      "Bash(gh api *)",
+      "Bash(python3 -)",
+      "Bash(node --input-type=module -e \"$\\(sed -n '1,10p' index.js\\); console.log\\(WHITELISTED_USERS.length, WHITELISTED_USERS.includes\\('amitt77'\\), WHITELISTED_USERS.includes\\('niraj-gautam'\\)\\)\")",
+      "Bash(node --check index.js)",
+      "Bash(sed -n '/^const WHITELISTED_USERS/,/toLowerCase\\(\\)\\);/p' index.js)",
+      "Bash(node --input-type=module -e ' *)"
     ]
   }
 }
