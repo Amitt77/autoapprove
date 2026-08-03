@@ -156,7 +156,9 @@ async function handleMessage(event, env) {
 
   if (!isDM && !isWatched) return;
 
-  for (const pr of prLinks) {
+  for (const [i, pr] of prLinks.entries()) {
+    // ponytail: GitHub 403s on rapid-fire review POSTs — breathe every 6
+    if (i > 0 && i % 6 === 0) await new Promise((r) => setTimeout(r, 2000));
     try {
       const data = await ghRequest(
         `/repos/${pr.owner}/${pr.repo}/pulls/${pr.pull_number}`,
