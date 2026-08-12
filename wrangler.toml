@@ -2,6 +2,5 @@ name = "autoapprove"
 main = "index.js"
 compatibility_date = "2024-11-01"
 
-# Optional: set WATCH_CHANNELS as a plain var (non-secret)
-# [vars]
-# WATCH_CHANNELS = "C0123456789,C9876543210"
+[vars]
+WATCH_CHANNELS = "C04S2RSFAH2"
