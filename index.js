@@ -140,6 +140,8 @@ function ephemeral(text) {
   });
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function handleMessage(event, env) {
   const text = event.text || "";
   const prLinks = extractPRLinks(text);
@@ -156,43 +158,42 @@ async function handleMessage(event, env) {
 
   if (!isDM && !isWatched) return;
 
-  for (const [i, pr] of prLinks.entries()) {
-    // ponytail: GitHub 403s on rapid-fire review POSTs — breathe every 6
-    if (i > 0 && i % 6 === 0) await new Promise((r) => setTimeout(r, 2000));
-    try {
-      const data = await ghRequest(
-        `/repos/${pr.owner}/${pr.repo}/pulls/${pr.pull_number}`,
-        "GET", null, env.GITHUB_TOKEN
-      );
-      const author = data.user.login.toLowerCase();
-      const allowed = WHITELISTED_USERS.some((name) => author.includes(name));
-      console.log(`[github] ${pr.owner}/${pr.repo}#${pr.pull_number} author=${author} allowed=${allowed}`);
+  // fetch() is killed at 30s (waitUntil can't extend it) — queue consumer gets 15 min per batch
+  const msgs = prLinks.map((pr) => ({ body: { pr, channel: event.channel, ts: event.ts } }));
+  for (let i = 0; i < msgs.length; i += 100) await env.PR_QUEUE.sendBatch(msgs.slice(i, i + 100));
+  console.log(`[queue] enqueued ${msgs.length} PR(s) from ${event.channel}`);
+}
 
-      if (!allowed) {
-        await postMessage(
-          event.channel, event.ts,
-          `⚠️ The author of <https://github.com/${pr.owner}/${pr.repo}/pull/${pr.pull_number}|${pr.repo}#${pr.pull_number}> (\`${author}\`) is not whitelisted — skipped auto-approval.`,
-          env.SLACK_BOT_TOKEN
-        );
-        continue;
-      }
+async function approvePR({ pr, channel, ts }, env) {
+  const data = await ghRequest(
+    `/repos/${pr.owner}/${pr.repo}/pulls/${pr.pull_number}`,
+    "GET", null, env.GITHUB_TOKEN
+  );
+  const author = data.user.login.toLowerCase();
+  const allowed = WHITELISTED_USERS.some((name) => author.includes(name));
+  console.log(`[github] ${pr.owner}/${pr.repo}#${pr.pull_number} author=${author} allowed=${allowed}`);
 
-      if (await isAlreadyApprovedByMe(pr, env.GITHUB_TOKEN)) {
-        await addReaction(event.channel, event.ts, env.SLACK_BOT_TOKEN, env.SLACK_USER_TOKEN);
-        console.log(`[bot] already approved PR by "${author}", skipping`);
-        continue;
-      }
-
-      await ghRequest(
-        `/repos/${pr.owner}/${pr.repo}/pulls/${pr.pull_number}/reviews`,
-        "POST", { event: "APPROVE" }, env.GITHUB_TOKEN
-      );
-      await addReaction(event.channel, event.ts, env.SLACK_BOT_TOKEN, env.SLACK_USER_TOKEN);
-      console.log(`[bot] approved PR by "${author}"`);
-    } catch (err) {
-      console.error(`[bot] failed ${pr.owner}/${pr.repo}#${pr.pull_number}:`, err.message);
-    }
+  if (!allowed) {
+    await postMessage(
+      channel, ts,
+      `⚠️ The author of <https://github.com/${pr.owner}/${pr.repo}/pull/${pr.pull_number}|${pr.repo}#${pr.pull_number}> (\`${author}\`) is not whitelisted — skipped auto-approval.`,
+      env.SLACK_BOT_TOKEN
+    );
+    return;
   }
+
+  if (await isAlreadyApprovedByMe(pr, env.GITHUB_TOKEN)) {
+    await addReaction(channel, ts, env.SLACK_BOT_TOKEN, env.SLACK_USER_TOKEN);
+    console.log(`[bot] already approved PR by "${author}", skipping`);
+    return;
+  }
+
+  await ghRequest(
+    `/repos/${pr.owner}/${pr.repo}/pulls/${pr.pull_number}/reviews`,
+    "POST", { event: "APPROVE" }, env.GITHUB_TOKEN
+  );
+  await addReaction(channel, ts, env.SLACK_BOT_TOKEN, env.SLACK_USER_TOKEN);
+  console.log(`[bot] approved PR by "${author}"`);
 }
 
 async function handleSlashApprove(request, rawBody, env) {
@@ -256,5 +257,19 @@ export default {
     }
 
     return new Response("OK");
+  },
+
+  async queue(batch, env) {
+    for (const msg of batch.messages) {
+      const { pr } = msg.body;
+      try {
+        await approvePR(msg.body, env);
+        msg.ack();
+      } catch (err) {
+        console.error(`[bot] failed ${pr.owner}/${pr.repo}#${pr.pull_number} (attempt ${msg.attempts}):`, err.message);
+        msg.retry({ delaySeconds: 30 * msg.attempts });
+      }
+      await sleep(1000); // GitHub secondary rate limit: ≥1s between mutating requests
+    }
   },
 };

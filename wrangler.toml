@@ -4,3 +4,14 @@ compatibility_date = "2024-11-01"
 
 [vars]
 WATCH_CHANNELS = "C04S2RSFAH2"
+
+[[queues.producers]]
+binding = "PR_QUEUE"
+queue = "autoapprove-prs"
+
+[[queues.consumers]]
+queue = "autoapprove-prs"
+max_batch_size = 10
+max_batch_timeout = 2
+max_retries = 2
+max_concurrency = 1
